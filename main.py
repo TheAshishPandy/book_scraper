@@ -1,41 +1,39 @@
-import pandas as pd
 from scraper import scrape_books_from_page
-from config import BASE_URL,MONGO_URI
+from config import BASE_URL, CATEGORY_SLUGS,MONGO_URI
 from pymongo import MongoClient
-from datetime import datetime,timezone
-# Connect to MongoDB Atlas
+import pandas as pd
+from datetime import datetime, timezone
 
-client = MongoClient(MONGO_URI)
-db = client["bookstore"]
-collection = db["books"]
+client     = MongoClient(MONGO_URI)
+collection = client["bookstore"]["books"]
 
 def save_to_mongo(data):
-    inserted_count = 0
+    new_count = 0
     for book in data:
-        # Add timestamp
         book["scraped_at"] = datetime.now(timezone.utc)
-
-        # Check for duplicate using Product URL
         if not collection.find_one({"Product URL": book["Product URL"]}):
             collection.insert_one(book)
-            inserted_count += 1
-
-    print(f"{inserted_count} new records saved to MongoDB.")
+            new_count += 1
+    print(f"{new_count} new records saved to MongoDB.")
 
 def main():
     all_books = []
 
-    url = BASE_URL + "page-1.html"
-    print(f"Scraping {url}...")
-    books = scrape_books_from_page(url)
-    all_books.extend(books)
+    for category_name, slug in CATEGORY_SLUGS.items():
+        url = f"{BASE_URL}category/books/{slug}/index.html"
+        print(f"Scraping category {category_name!r} at {url}")
+        books = scrape_books_from_page(url)
+        for book in books:
+            book["Category"] =category_name;
+        # 4. Collect
+        all_books.extend(books)
 
     save_to_mongo(all_books)
 
-    # Optional: Save to CSV too
+    # Optional CSV export
     df = pd.DataFrame(all_books)
     df.to_csv("data/book_details.csv", index=False)
-    print("Scraping complete! Saved to MongoDB and CSV.")
+    print("Done! Data saved to MongoDB and CSV.")
 
 if __name__ == "__main__":
     main()
