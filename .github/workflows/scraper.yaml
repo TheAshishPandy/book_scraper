@@ -19,9 +19,36 @@ jobs:
         python-version: '3.12'
 
     - name: Install dependencies
-      run: pip install -r requirements.txt
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install certifi pymongo[srv] pandas
+
+    - name: Verify MongoDB connection
+      run: |
+        python -c "
+        from pymongo import MongoClient
+        import certifi
+        try:
+            client = MongoClient(
+                'mongodb+srv://${{ secrets.MONGODB_USER }}:${{ secrets.MONGODB_PASSWORD }}@books.kustpvh.mongodb.net/?retryWrites=true&w=majority&appName=books',
+                tlsCAFile=certifi.where(),
+                serverSelectionTimeoutMS=5000
+            )
+            client.server_info()
+            print('✅ MongoDB connection successful')
+        except Exception as e:
+            print(f'❌ MongoDB connection failed: {e}')
+            raise
+        "
 
     - name: Run scraper
       run: python main.py
-      env:
-        MONGO_URI: ${{ secrets.MONGO_URI }}
+      timeout-minutes: 15
+
+    - name: Upload CSV artifact
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: book-data
+        path: data/book_details.csv
